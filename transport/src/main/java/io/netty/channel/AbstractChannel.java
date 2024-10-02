@@ -69,6 +69,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
      */
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
+        // 创建唯一ID
         id = newId();
         unsafe = newUnsafe();
         pipeline = newChannelPipeline();
@@ -462,6 +463,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
+            // 参数检查
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
             if (isRegistered()) {
                 promise.setFailure(new IllegalStateException("registered to an event loop already"));
@@ -473,8 +475,12 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 return;
             }
 
+            // 明确地指定了要设置的是 AbstractChannel 实例的 eventLoop 属性，而不是 AbstractUnsafe 实例的属性。
             AbstractChannel.this.eventLoop = eventLoop;
 
+            // 检查当前线程是否在 eventLoop 中运行，如果是，则直接调用 register0 方法进行注册;
+            // 显然，当前方法在 main() 线程中与逆行
+            // 如果当前线程不在 eventLoop 中运行，则通过 eventLoop.execute 提交一个任务到 eventLoop 中执行 register0 方法：
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
@@ -500,22 +506,30 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
+                // 参数检查
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 做实际的注册
                 doRegister();
+                // 更新状态
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+                // 调用 pipeline.invokeHandlerAddedIfNeeded 确保在通知 promise 之前调用 handlerAdded 方法
+                // 这是为了防止用户在 ChannelFutureListener 中触发事件时出现问题
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 将 promise 设置为成功状态，并触发 pipeline.fireChannelRegistered 事件，通知管道已经注册：
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
+                // 如果 Channel 是活跃的，并且这是第一次注册，则触发 pipeline.fireChannelActive 事件。
+                // 如果 Channel 之前已经注册过，并且 config().isAutoRead() 返回 true，则调用 beginRead 方法开始读取数据：
                 if (isActive()) {
                     if (firstRegistration) {
                         pipeline.fireChannelActive();
@@ -558,6 +572,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                // 执行实际的绑定操作
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);

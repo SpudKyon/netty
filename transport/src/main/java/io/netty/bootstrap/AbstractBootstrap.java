@@ -259,6 +259,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * Create a new {@link Channel} and bind it.
      */
     public ChannelFuture bind(int inetPort) {
+        // 创建一个绑定到指定端口的SocketAddress，并调用bind(SocketAddress)方法
         return bind(new InetSocketAddress(inetPort));
     }
 
@@ -280,28 +281,36 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * Create a new {@link Channel} and bind it.
      */
     public ChannelFuture bind(SocketAddress localAddress) {
+        // 验证必要参数是否已经设置，如EventLoopGroup和ChannelFactory
         validate();
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // 初始化并注册Channel，返回一个注册的ChannelFuture
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
+
+        // 如果注册时发生错误，直接返回错误的结果
         if (regFuture.cause() != null) {
             return regFuture;
         }
 
+        // 如果注册已经完成且成功，创建一个ChannelPromise
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
+            // 进行实际的绑定操作
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
+            // 如果注册还未完成，创建PendingRegistrationPromise并添加监听器
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             regFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
+                    // 如果注册失败，将错误设置到Promise中
                     Throwable cause = future.cause();
                     if (cause != null) {
                         // Registration on the EventLoop failed so fail the ChannelPromise directly to not cause an
@@ -310,6 +319,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                     } else {
                         // Registration was successful, so set the correct executor to use.
                         // See https://github.com/netty/netty/issues/2586
+                        // 注册成功后，执行绑定操作
                         promise.registered();
 
                         doBind0(regFuture, channel, localAddress, promise);
@@ -335,7 +345,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
-
+        // 注册一个新的Channel到EventLoopGroup中，并返回一个ChannelFuture对象
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -359,6 +369,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     abstract void init(Channel channel) throws Exception;
 
+    /**
+     * Retrieves a collection of {@link ChannelInitializerExtension} instances using the specified class loader.
+     * If no class loader is specified, the class loader that loaded this bootstrap class is used.
+     *
+     * @return A collection of {@link ChannelInitializerExtension} instances.
+     */
     Collection<ChannelInitializerExtension> getInitializerExtensions() {
         ClassLoader loader = extensionsClassLoader;
         if (loader == null) {
@@ -373,6 +389,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
+        // 将实际的绑定操作放入到EventLoop的执行队列中，避免阻塞主线程
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {

@@ -573,10 +573,14 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             return promise;
         }
 
+        // 查找下一个出站处理器上下文，该上下文具有 MASK_BIND 掩码
         final AbstractChannelHandlerContext next = findContextOutbound(MASK_BIND);
+        // 获取该上下文的执行器（EventExecutor），并检查当前线程是否在执行器的事件循环中。
+        // 如果是，则直接调用 next.invokeBind 方法执行绑定操作
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             next.invokeBind(localAddress, promise);
+            // 如果当前线程不在执行器的事件循环中，则通过 safeExecute 方法将绑定操作提交给执行器执行
         } else {
             safeExecute(executor, new Runnable() {
                 @Override

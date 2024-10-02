@@ -130,11 +130,13 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 获取的用户定义的选项和属性
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
-
+        // 获取channel的pipeline，这是一个处理入站和出站数据的处理器链
         ChannelPipeline p = channel.pipeline();
 
+        // 获取用于配置的变量
         final EventLoopGroup currentChildGroup = childGroup;
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
@@ -142,6 +144,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         final Collection<ChannelInitializerExtension> extensions = getInitializerExtensions();
 
         p.addLast(new ChannelInitializer<Channel>() {
+            // 初始化channel
             @Override
             public void initChannel(final Channel ch) {
                 final ChannelPipeline pipeline = ch.pipeline();
@@ -149,7 +152,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
-
+                // 添加 ServerBootstrapAcceptor
+                // ServerBootstrapAcceptor负责处理已接受的通道，设置它们的选项、属性，并将它们注册到子事件循环组。
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
