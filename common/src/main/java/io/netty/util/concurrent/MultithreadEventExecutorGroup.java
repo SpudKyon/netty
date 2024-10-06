@@ -70,12 +70,15 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
      */
     protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                             EventExecutorChooserFactory chooserFactory, Object... args) {
+        // 参数判断
         checkPositive(nThreads, "nThreads");
 
         if (executor == null) {
+            // 创建默认的线程工厂
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
 
+        // 创建 EventExecutor 数组
         children = new EventExecutor[nThreads];
 
         for (int i = 0; i < nThreads; i ++) {
@@ -84,7 +87,6 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 children[i] = newChild(executor, args);
                 success = true;
             } catch (Exception e) {
-                // TODO: Think about if this is a good exception type
                 throw new IllegalStateException("failed to create a child event loop", e);
             } finally {
                 if (!success) {
@@ -108,8 +110,10 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
             }
         }
 
+        // 绑定线程选择器
         chooser = chooserFactory.newChooser(children);
 
+        // 为每个EventExecutor添加终止监听器
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override
             public void operationComplete(Future<Object> future) throws Exception {

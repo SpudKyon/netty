@@ -69,10 +69,12 @@ public final class ThreadExecutorMap {
         return new Runnable() {
             @Override
             public void run() {
+                // 设置当前线程的 EventExecutor
                 setCurrentEventExecutor(eventExecutor);
                 try {
                     command.run();
                 } finally {
+                    // 移除当前线程的 EventExecutor
                     setCurrentEventExecutor(null);
                 }
             }

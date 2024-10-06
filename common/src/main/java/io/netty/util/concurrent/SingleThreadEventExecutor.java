@@ -167,6 +167,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         super(parent);
         this.addTaskWakesUp = addTaskWakesUp;
         this.maxPendingTasks = DEFAULT_MAX_PENDING_EXECUTOR_TASKS;
+        // 将传入的executor包装成一个新的Executor，并将当前的SingleThreadEventExecutor实例与之关联
         this.executor = ThreadExecutorMap.apply(executor, this);
         this.taskQueue = ObjectUtil.checkNotNull(taskQueue, "taskQueue");
         this.rejectedExecutionHandler = ObjectUtil.checkNotNull(rejectedHandler, "rejectedHandler");
@@ -832,9 +833,13 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void execute(Runnable task, boolean immediate) {
+        // 同一个 channel 的注册、读、写等都在 eventLoop 完成，避免多线程的锁竞争
         boolean inEventLoop = inEventLoop();
+        // 将任务添加到任务队列中。它首先检查任务是否为 null，然后调用 offerTask 方法尝试将任务放入队列。
         addTask(task);
         if (!inEventLoop) {
+            // 启动执行线程。
+            // 检查当前状态是否为 ST_NOT_STARTED，如果是，则尝试将状态更新为 ST_STARTED，并调用 doStartThread() 方法来实际启动线程。
             startThread();
             if (isShutdown()) {
                 boolean reject = false;
@@ -853,6 +858,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
             }
         }
 
+        // 是否需要唤醒执行线程
         if (!addTaskWakesUp && immediate) {
             wakeup(inEventLoop);
         }
@@ -948,10 +954,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
     private void startThread() {
+        // 判断线程是否启动
         if (state == ST_NOT_STARTED) {
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
+                    // 启动线程
                     doStartThread();
                     success = true;
                 } finally {
@@ -982,7 +990,9 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     }
 
     private void doStartThread() {
+        // 确保线程还未启动
         assert thread == null;
+        // 通过 executor 来启动线程
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -994,6 +1004,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 执行任务
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {

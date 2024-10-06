@@ -143,6 +143,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 rejectedExecutionHandler);
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+        // 调用openSelector()方法来打开一个新的Selector实例。
+        // Selector是Java NIO中用于多路复用I/O操作的核心组件。
         final SelectorTuple selectorTuple = openSelector();
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
@@ -507,7 +509,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             try {
                 int strategy;
                 try {
+                    // 计算选择策略。决定下一步的动作
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
+                    // 策略处理
                     switch (strategy) {
                     case SelectStrategy.CONTINUE:
                         continue;
@@ -523,6 +527,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
                             if (!hasTasks()) {
+                                // 阻塞当前线程，直到有一个或多个通道准备好进行 I/O 操作，或者达到指定的超时时间curDeadlineNanos
                                 strategy = select(curDeadlineNanos);
                             }
                         } finally {
@@ -536,15 +541,18 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 } catch (IOException e) {
                     // If we receive an IOException here its because the Selector is messed up. Let's rebuild
                     // the selector and retry. https://github.com/netty/netty/issues/8566
+                    // 重建选择器，以修复因选择器状态损坏而导致的 I/O 操作问题
                     rebuildSelector0();
                     selectCnt = 0;
                     handleLoopException(e);
                     continue;
                 }
 
+                // 连续成功selectCnt次数
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
+                // 默认值为50，表示I/O操作和非I/O操作的时间比例
                 final int ioRatio = this.ioRatio;
                 boolean ranTasks;
                 if (ioRatio == 100) {
