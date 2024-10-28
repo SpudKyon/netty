@@ -381,21 +381,30 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     }
 
     @Override
+    /**
+     * 处理通道的注册操作。
+     * 该方法尝试将当前通道注册到事件循环的选择器中。
+     * 如果选择键被取消，则会强制选择器立即选择，以确保选择键被正确处理。
+     * 
+     * @throws Exception 如果注册过程中发生错误
+     */
     protected void doRegister() throws Exception {
-        boolean selected = false;
+        boolean selected = false; // 标记是否已经强制选择过
         for (;;) {
             try {
+                // 将当前通道注册到事件循环的选择器中，初始兴趣操作设置为0
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
-                return;
+                return; // 注册成功，退出方法
             } catch (CancelledKeyException e) {
+                // 如果选择键被取消，检查是否已经强制选择过
                 if (!selected) {
-                    // Force the Selector to select now as the "canceled" SelectionKey may still be
-                    // cached and not removed because no Select.select(..) operation was called yet.
+                    // 强制选择器立即选择，因为被取消的选择键可能仍然被缓存
+                    // 并且未被移除，因为尚未调用 Select.select(..) 操作
                     eventLoop().selectNow();
-                    selected = true;
+                    selected = true; // 标记为已强制选择
                 } else {
-                    // We forced a select operation on the selector before but the SelectionKey is still cached
-                    // for whatever reason. JDK bug ?
+                    // 如果之前已经强制选择过，但选择键仍然被缓存，抛出异常
+                    // 这可能是JDK的一个bug
                     throw e;
                 }
             }

@@ -223,34 +223,45 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
         @Override
         @SuppressWarnings("unchecked")
+        // 处理接收到的消息
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // 将接收到的消息转换为子通道
             final Channel child = (Channel) msg;
 
+            // 将子处理器添加到子通道的管道中
             child.pipeline().addLast(childHandler);
 
+            // 设置子通道的选项
             setChannelOptions(child, childOptions, logger);
+            // 设置子通道的属性
             setAttributes(child, childAttrs);
 
+            // 如果有扩展，执行后初始化操作
             if (!extensions.isEmpty()) {
                 for (ChannelInitializerExtension extension : extensions) {
                     try {
+                        // 调用扩展的后初始化方法
                         extension.postInitializeServerChildChannel(child);
                     } catch (Exception e) {
+                        // 记录扩展初始化过程中抛出的异常
                         logger.warn("Exception thrown from postInitializeServerChildChannel", e);
                     }
                 }
             }
 
+            // 尝试注册子通道到子事件循环组
             try {
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
+                        // 如果注册失败，强制关闭子通道
                         if (!future.isSuccess()) {
                             forceClose(child, future.cause());
                         }
                     }
                 });
             } catch (Throwable t) {
+                // 如果注册过程中发生异常，强制关闭子通道
                 forceClose(child, t);
             }
         }

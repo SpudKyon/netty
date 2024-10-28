@@ -746,56 +746,64 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         }
     }
-
+    // 处理选中的键
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
+        // 获取通道的安全操作接口
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        
+        // 检查选择键是否有效
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {
+                // 尝试获取与通道关联的事件循环
                 eventLoop = ch.eventLoop();
             } catch (Throwable ignored) {
-                // If the channel implementation throws an exception because there is no event loop, we ignore this
-                // because we are only trying to determine if ch is registered to this event loop and thus has authority
-                // to close ch.
+                // 如果通道实现抛出异常，表示没有事件循环，我们忽略这个异常
+                // 因为我们只是想确定通道是否注册到这个事件循环，并因此有权关闭通道。
                 return;
             }
-            // Only close ch if ch is still registered to this EventLoop. ch could have deregistered from the event loop
-            // and thus the SelectionKey could be cancelled as part of the deregistration process, but the channel is
-            // still healthy and should not be closed.
-            // See https://github.com/netty/netty/issues/5125
+            // 仅在通道仍然注册到此事件循环时关闭通道
+            // 通道可能已经从事件循环中注销，因此选择键可能在注销过程中被取消，但通道仍然健康，不应关闭。
+            // 参见：https://github.com/netty/netty/issues/5125
             if (eventLoop == this) {
-                // close the channel if the key is not valid anymore
+                // 如果选择键不再有效，则关闭通道
                 unsafe.close(unsafe.voidPromise());
             }
             return;
         }
 
         try {
+            // key 合法
+            // 获取当前选择键的准备操作
             int readyOps = k.readyOps();
-            // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
-            // the NIO JDK channel implementation may throw a NotYetConnectedException.
+            // 在尝试触发 read(...) 或 write(...) 之前，我们首先需要调用 finishConnect()
+            // 否则 NIO JDK 通道实现可能会抛出 NotYetConnectedException。
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
-                // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
-                // See https://github.com/netty/netty/issues/924
+                // 移除 OP_CONNECT，否则 Selector.select(..) 将始终返回而不阻塞
+                // 参见：https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
-                ops &= ~SelectionKey.OP_CONNECT;
-                k.interestOps(ops);
+                ops &= ~SelectionKey.OP_CONNECT; // 清除 OP_CONNECT
+                k.interestOps(ops); // 更新选择键的兴趣操作
 
+                // 完成连接操作
                 unsafe.finishConnect();
             }
 
-            // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
+            // 首先处理 OP_WRITE，因为我们可能能够写入一些排队的缓冲区，从而释放内存。
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
-                // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
-               unsafe.forceFlush();
+                // 调用 forceFlush，这也会在没有剩余可写内容时清除 OP_WRITE
+                unsafe.forceFlush();
             }
 
-            // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
-            // to a spin loop
+            // 还要检查 readOps 是否为 0，以避免可能导致无限循环的 JDK 错误
+            // 如果当前的NioEventLoop是工作线程，那么这里处理的是op_read事件；
+            // 如果是主线程，那么这里处理的是op_accept事件。
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                // 触发读取操作
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {
+            // 如果选择键被取消，关闭通道
             unsafe.close(unsafe.voidPromise());
         }
     }

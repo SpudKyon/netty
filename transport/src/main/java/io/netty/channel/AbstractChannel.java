@@ -479,7 +479,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             AbstractChannel.this.eventLoop = eventLoop;
 
             // 检查当前线程是否在 eventLoop 中运行，如果是，则直接调用 register0 方法进行注册;
-            // 显然，当前方法在 main() 线程中与逆行
+            // 显然，当前方法在 main() 线程中运行
             // 如果当前线程不在 eventLoop 中运行，则通过 eventLoop.execute 提交一个任务到 eventLoop 中执行 register0 方法：
             if (eventLoop.inEventLoop()) {
                 register0(promise);
@@ -502,50 +502,54 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * 处理通道的注册操作。
+         * 
+         * @param promise 用于表示注册操作的承诺
+         */
         private void register0(ChannelPromise promise) {
             try {
-                // check if the channel is still open as it could be closed in the mean time when the register
-                // call was outside of the eventLoop
-                // 参数检查
+                // 检查通道是否仍然开放，因为在事件循环外调用注册时，通道可能已经关闭
+                // 参数检查，确保 promise 是不可取消的，并且通道是开放的
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
-                    return;
+                    return; // 如果不满足条件，直接返回
                 }
+                
+                // 记录是否是第一次注册
                 boolean firstRegistration = neverRegistered;
-                // 做实际的注册
+                
+                // 执行实际的注册操作
                 doRegister();
-                // 更新状态
+                
+                // 更新状态，标记通道已经注册
                 neverRegistered = false;
                 registered = true;
 
-                // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
-                // user may already fire events through the pipeline in the ChannelFutureListener.
-                // 调用 pipeline.invokeHandlerAddedIfNeeded 确保在通知 promise 之前调用 handlerAdded 方法
+                // 确保在通知 promise 之前调用 handlerAdded(...) 方法
                 // 这是为了防止用户在 ChannelFutureListener 中触发事件时出现问题
                 pipeline.invokeHandlerAddedIfNeeded();
 
-                // 将 promise 设置为成功状态，并触发 pipeline.fireChannelRegistered 事件，通知管道已经注册：
+                // 将 promise 设置为成功状态，并触发 pipeline.fireChannelRegistered 事件，通知管道已经注册
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
-                // Only fire a channelActive if the channel has never been registered. This prevents firing
-                // multiple channel actives if the channel is deregistered and re-registered.
-                // 如果 Channel 是活跃的，并且这是第一次注册，则触发 pipeline.fireChannelActive 事件。
-                // 如果 Channel 之前已经注册过，并且 config().isAutoRead() 返回 true，则调用 beginRead 方法开始读取数据：
+                
+                // 仅在通道从未注册的情况下触发 channelActive 事件
+                // 这可以防止在通道被注销并重新注册时多次触发 channelActive 事件
                 if (isActive()) {
                     if (firstRegistration) {
+                        // 如果这是第一次注册，触发 channelActive 事件
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
-                        // This channel was registered before and autoRead() is set. This means we need to begin read
-                        // again so that we process inbound data.
-                        //
-                        // See https://github.com/netty/netty/issues/4805
+                        // 如果通道之前已经注册，并且 autoRead() 被设置为 true，
+                        // 则需要重新开始读取以处理传入数据
                         beginRead();
                     }
                 }
             } catch (Throwable t) {
-                // Close the channel directly to avoid FD leak.
+                // 如果发生异常，直接关闭通道以避免文件描述符泄漏
                 closeForcibly();
                 closeFuture.setClosed();
-                safeSetFailure(promise, t);
+                safeSetFailure(promise, t); // 设置 promise 为失败状态
             }
         }
 
@@ -840,18 +844,23 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         @Override
+        // 开始读取操作，确保当前线程在事件循环中
         public final void beginRead() {
-            assertEventLoop();
+            assertEventLoop(); // 断言当前线程在事件循环中
 
             try {
+                // 调用 doBeginRead 方法执行实际的读取操作
                 doBeginRead();
             } catch (final Exception e) {
+                // 如果发生异常，使用 invokeLater 将异常处理推迟到事件循环中执行
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        // 在管道中触发异常捕获事件，通知处理异常
                         pipeline.fireExceptionCaught(e);
                     }
                 });
+                // 关闭通道并返回一个空的承诺
                 close(voidPromise());
             }
         }

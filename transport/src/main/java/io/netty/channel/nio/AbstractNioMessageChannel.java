@@ -21,6 +21,7 @@ import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.nio.AbstractNioChannel.AbstractNioUnsafe;
 
 import java.io.IOException;
 import java.net.PortUnreachableException;
@@ -64,63 +65,72 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         private final List<Object> readBuf = new ArrayList<Object>();
 
         @Override
+        // 读取方法，处理接收到的消息
         public void read() {
+            // 确保当前线程在事件循环中
             assert eventLoop().inEventLoop();
+            // 获取通道配置
             final ChannelConfig config = config();
+            // 获取通道管道
             final ChannelPipeline pipeline = pipeline();
+            // 获取接收字节缓冲分配器的句柄，以便管理接收的字节缓冲区和消息读取过程
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+            // 设置配置
             allocHandle.reset(config);
 
-            boolean closed = false;
-            Throwable exception = null;
+            boolean closed = false; // 标记通道是否关闭
+            Throwable exception = null; // 捕获异常
             try {
                 try {
+                    // 循环读取消息
                     do {
+                        // 从通道读取消息到缓冲区
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
-                            break;
+                            break; // 如果没有读取到消息，退出循环
                         }
                         if (localRead < 0) {
-                            closed = true;
+                            closed = true; // 如果读取到负值，标记通道关闭
                             break;
                         }
 
+                        // 增加读取的消息计数
                         allocHandle.incMessagesRead(localRead);
-                    } while (continueReading(allocHandle));
+                    } while (continueReading(allocHandle)); // 检查是否继续读取
                 } catch (Throwable t) {
-                    exception = t;
+                    exception = t; // 捕获异常
                 }
 
+                // 获取读取缓冲区的大小
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
-                    readPending = false;
+                    readPending = false; // 标记读取操作已完成
+                    // 触发通道读取事件
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
-                readBuf.clear();
-                allocHandle.readComplete();
-                pipeline.fireChannelReadComplete();
+                readBuf.clear(); // 清空读取缓冲区
+                allocHandle.readComplete(); // 标记读取完成
+                pipeline.fireChannelReadComplete(); // 触发读取完成事件
 
                 if (exception != null) {
-                    closed = closeOnReadError(exception);
-
-                    pipeline.fireExceptionCaught(exception);
+                    closed = closeOnReadError(exception); // 处理读取错误
+                    pipeline.fireExceptionCaught(exception); // 触发异常事件
                 }
 
                 if (closed) {
-                    inputShutdown = true;
+                    inputShutdown = true; // 标记输入关闭
                     if (isOpen()) {
-                        close(voidPromise());
+                        close(voidPromise()); // 关闭通道
                     }
                 }
             } finally {
-                // Check if there is a readPending which was not processed yet.
-                // This could be for two reasons:
-                // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
-                // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
-                //
-                // See https://github.com/netty/netty/issues/2254
+                // 检查是否有未处理的读取请求
+                // 这可能是由于两种原因：
+                // * 用户在 channelRead(...) 方法中调用了 Channel.read() 或 ChannelHandlerContext.read()
+                // * 用户在 channelReadComplete(...) 方法中调用了 Channel.read() 或 ChannelHandlerContext.read()
+                // 参见：https://github.com/netty/netty/issues/2254
                 if (!readPending && !config.isAutoRead()) {
-                    removeReadOp();
+                    removeReadOp(); // 移除读取操作
                 }
             }
         }

@@ -445,28 +445,31 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     }
 
     @Override
+    // 创建一个新的不安全的通道实例
     protected AbstractNioUnsafe newUnsafe() {
         return new NioSocketChannelUnsafe();
     }
 
+    // 定义NioSocketChannelUnsafe类，继承自NioByteUnsafe
     private final class NioSocketChannelUnsafe extends NioByteUnsafe {
         @Override
+        // 准备关闭通道的方法
         protected Executor prepareToClose() {
             try {
+                // 检查通道是否打开且SO_LINGER大于0
                 if (javaChannel().isOpen() && config().getSoLinger() > 0) {
-                    // We need to cancel this key of the channel so we may not end up in a eventloop spin
-                    // because we try to read or write until the actual close happens which may be later due
-                    // SO_LINGER handling.
-                    // See https://github.com/netty/netty/issues/4449
+                    // 取消通道的键，以避免在事件循环中出现死循环
+                    // 因为我们尝试在实际关闭之前进行读取或写入，这可能会由于SO_LINGER处理而延迟
+                    // 参考：https://github.com/netty/netty/issues/4449
                     doDeregister();
-                    return GlobalEventExecutor.INSTANCE;
+                    return GlobalEventExecutor.INSTANCE; // 返回全局事件执行器
                 }
             } catch (Throwable ignore) {
-                // Ignore the error as the underlying channel may be closed in the meantime and so
-                // getSoLinger() may produce an exception. In this case we just return null.
-                // See https://github.com/netty/netty/issues/4449
+                // 忽略错误，因为底层通道可能已经关闭，因此
+                // getSoLinger()可能会产生异常。在这种情况下，我们只需返回null。
+                // 参考：https://github.com/netty/netty/issues/4449
             }
-            return null;
+            return null; // 返回null表示没有准备好的执行器
         }
     }
 

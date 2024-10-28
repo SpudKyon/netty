@@ -150,25 +150,32 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     }
 
     @Override
+    // 该方法用于读取消息并将其添加到给定的缓冲区中
     protected int doReadMessages(List<Object> buf) throws Exception {
+        // 尝试接受一个新的SocketChannel，使用javaChannel()方法获取当前的ServerSocketChannel
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
+            // 如果成功接受到SocketChannel
             if (ch != null) {
+                // 将新的NioSocketChannel添加到缓冲区
                 buf.add(new NioSocketChannel(this, ch));
-                return 1;
+                return 1; // 返回成功读取的消息数量
             }
         } catch (Throwable t) {
+            // 如果创建新通道失败，记录警告信息
             logger.warn("Failed to create a new channel from an accepted socket.", t);
 
             try {
+                // 尝试关闭SocketChannel
                 ch.close();
             } catch (Throwable t2) {
+                // 如果关闭SocketChannel失败，记录警告信息
                 logger.warn("Failed to close a socket.", t2);
             }
         }
 
-        return 0;
+        return 0; // 返回0表示没有读取到消息
     }
 
     // Unnecessary stuff
