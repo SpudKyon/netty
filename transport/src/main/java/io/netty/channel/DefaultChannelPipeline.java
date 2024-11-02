@@ -88,9 +88,16 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      */
     private boolean registered;
 
+    // 构造函数，用于创建 DefaultChannelPipeline 实例
+    // 参数 channel 是与此管道关联的 Channel 对象
     protected DefaultChannelPipeline(Channel channel) {
+        // 检查传入的 channel 是否为 null，如果是则抛出异常
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
+        
+        // 创建一个成功的 ChannelFuture 实例，表示操作成功
         succeededFuture = new SucceededChannelFuture(channel, null);
+        
+        // 创建一个空的 ChannelPromise 实例，用于表示没有结果的操作
         voidPromise = new VoidChannelPromise(channel, true);
 
         tail = new TailContext(this);
@@ -158,50 +165,58 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         ADD_AFTER;
     }
 
+    // internalAdd 方法用于将一个新的 ChannelHandler 添加到 ChannelPipeline 中。
+    // 参数说明：
+    // group: 事件执行器组，用于处理事件的线程。
+    // name: 新添加的 ChannelHandler 的名称。
+    // handler: 要添加的 ChannelHandler 实例。
+    // baseName: 基础名称，用于确定在何处插入新的 ChannelHandler。
+    // addStrategy: 添加策略，决定新处理器的插入位置。
     private ChannelPipeline internalAdd(EventExecutorGroup group, String name,
                                         ChannelHandler handler, String baseName,
                                         AddStrategy addStrategy) {
-        final AbstractChannelHandlerContext newCtx;
-        synchronized (this) {
-            checkMultiplicity(handler);
-            name = filterName(name, handler);
+        final AbstractChannelHandlerContext newCtx; // 新的处理上下文
+        synchronized (this) { // 同步以确保线程安全
+            checkMultiplicity(handler); // 检查处理器的多重性
+            name = filterName(name, handler); // 过滤处理器名称
 
-            newCtx = newContext(group, name, handler);
+            newCtx = newContext(group, name, handler); // 创建新的 HandlerContext
 
+            // 根据添加策略决定如何插入新的 HandlerContext
             switch (addStrategy) {
-                case ADD_FIRST:
+                case ADD_FIRST: // 添加到最前面
                     addFirst0(newCtx);
                     break;
-                case ADD_LAST:
+                case ADD_LAST: // 添加到最后面
                     addLast0(newCtx);
                     break;
-                case ADD_BEFORE:
+                case ADD_BEFORE: // 在指定的处理器之前添加
                     addBefore0(getContextOrDie(baseName), newCtx);
                     break;
-                case ADD_AFTER:
+                case ADD_AFTER: // 在指定的处理器之后添加
                     addAfter0(getContextOrDie(baseName), newCtx);
                     break;
                 default:
-                    throw new IllegalArgumentException("unknown add strategy: " + addStrategy);
+                    throw new IllegalArgumentException("unknown add strategy: " + addStrategy); // 抛出未知策略异常
             }
 
-            // If the registered is false it means that the channel was not registered on an eventLoop yet.
-            // In this case we add the context to the pipeline and add a task that will call
-            // ChannelHandler.handlerAdded(...) once the channel is registered.
+            // 如果注册为 false，表示通道尚未在事件循环中注册。
+            // 在这种情况下，将上下文添加到管道中，并添加一个任务，
+            // 一旦通道注册，将调用 ChannelHandler.handlerAdded(...)。
             if (!registered) {
-                newCtx.setAddPending();
-                callHandlerCallbackLater(newCtx, true);
-                return this;
+                newCtx.setAddPending(); // 设置添加为待处理状态
+                callHandlerCallbackLater(newCtx, true); // 延迟调用处理器回调
+                return this; // 返回当前管道
             }
 
-            EventExecutor executor = newCtx.executor();
-            if (!executor.inEventLoop()) {
-                callHandlerAddedInEventLoop(newCtx, executor);
-                return this;
+            EventExecutor executor = newCtx.executor(); // 获取新的处理上下文的执行器
+            if (!executor.inEventLoop()) { // 如果不在事件循环中
+                callHandlerAddedInEventLoop(newCtx, executor); // 在事件循环中调用处理器添加
+                return this; // 返回当前管道
             }
         }
-        callHandlerAdded0(newCtx);
-        return this;
+        callHandlerAdded0(newCtx); // 调用处理器添加方法
+        return this; // 返回当前管道
     }
 
     @Override
@@ -399,32 +414,40 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private AbstractChannelHandlerContext remove(final AbstractChannelHandlerContext ctx) {
+        // 确保要移除的上下文不是头部或尾部上下文
         assert ctx != head && ctx != tail;
 
+        // 使用同步块确保在移除处理程序时的线程安全
         synchronized (this) {
+            // 从处理程序列表中原子性地移除指定的上下文
             atomicRemoveFromHandlerList(ctx);
 
-            // If the registered is false it means that the channel was not registered on an eventloop yet.
-            // In this case we remove the context from the pipeline and add a task that will call
-            // ChannelHandler.handlerRemoved(...) once the channel is registered.
+            // 检查通道是否已注册到事件循环中
+            // 如果未注册，表示通道尚未在事件循环中注册
+            // 在这种情况下，从管道中移除上下文，并添加一个任务
+            // 一旦通道注册，就会调用 ChannelHandler.handlerRemoved(...)
             if (!registered) {
                 callHandlerCallbackLater(ctx, false);
-                return ctx;
+                return ctx; // 返回当前上下文
             }
 
+            // 获取当前上下文的事件执行器
             EventExecutor executor = ctx.executor();
+            // 如果当前线程不在事件执行器的事件循环中
             if (!executor.inEventLoop()) {
+                // 在事件执行器中异步执行移除处理程序的操作
                 executor.execute(new Runnable() {
                     @Override
                     public void run() {
-                        callHandlerRemoved0(ctx);
+                        callHandlerRemoved0(ctx); // 调用处理程序移除方法
                     }
                 });
-                return ctx;
+                return ctx; // 返回当前上下文
             }
         }
+        // 如果当前线程在事件执行器的事件循环中，直接调用处理程序移除方法
         callHandlerRemoved0(ctx);
-        return ctx;
+        return ctx; // 返回当前上下文
     }
 
     /**
@@ -541,33 +564,42 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         oldCtx.next = newCtx;
     }
 
+    // 检查 ChannelHandler 的多重性
     private static void checkMultiplicity(ChannelHandler handler) {
+        // 判断 handler 是否是 ChannelHandlerAdapter 的实例
         if (handler instanceof ChannelHandlerAdapter) {
-            ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
+            ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler; // 将 handler 转换为 ChannelHandlerAdapter 类型
+            // 如果该处理器不是可共享的且已经被添加过，则抛出异常
             if (!h.isSharable() && h.added) {
                 throw new ChannelPipelineException(
-                        h.getClass().getName() +
-                        " is not a @Sharable handler, so can't be added or removed multiple times.");
+                        h.getClass().getName() + // 获取处理器的类名
+                        " is not a @Sharable handler, so can't be added or removed multiple times."); // 异常信息
             }
-            h.added = true;
+            h.added = true; // 标记该处理器已被添加
         }
     }
 
+    // 该方法用于调用处理器的 handlerAdded() 方法
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
+            // 调用处理器的 handlerAdded() 方法
             ctx.callHandlerAdded();
         } catch (Throwable t) {
-            boolean removed = false;
+            boolean removed = false; // 标记处理器是否已被移除
             try {
+                // 从处理器列表中原子性地移除处理器
                 atomicRemoveFromHandlerList(ctx);
+                // 调用处理器的 handlerRemoved() 方法
                 ctx.callHandlerRemoved();
-                removed = true;
+                removed = true; // 标记为已移除
             } catch (Throwable t2) {
+                // 如果移除失败，记录警告日志
                 if (logger.isWarnEnabled()) {
                     logger.warn("Failed to remove a handler: " + ctx.name(), t2);
                 }
             }
 
+            // 根据处理器是否已移除，触发相应的异常处理
             if (removed) {
                 fireExceptionCaught(new ChannelPipelineException(
                         ctx.handler().getClass().getName() +

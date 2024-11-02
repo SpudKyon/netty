@@ -882,23 +882,31 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         }
     }
 
+    // 此方法用于执行写操作，具体实现为 invokeWrite0。
+    // 它接收一个消息对象和一个 ChannelPromise 作为参数。
     private void invokeWrite0(Object msg, ChannelPromise promise) {
         try {
             // DON'T CHANGE
-            // Duplex handlers implements both out/in interfaces causing a scalability issue
-            // see https://bugs.openjdk.org/browse/JDK-8180450
-            final ChannelHandler handler = handler();
-            final DefaultChannelPipeline.HeadContext headContext = pipeline.head;
+            // 双工处理器同时实现出站和入站接口，这会导致可扩展性问题
+            // 参见 https://bugs.openjdk.org/browse/JDK-8180450
+            final ChannelHandler handler = handler(); // 获取当前的 ChannelHandler
+            final DefaultChannelPipeline.HeadContext headContext = pipeline.head; // 获取管道的 head节点
+            // 检查当前处理器是否为管道的 head节点
             if (handler == headContext) {
+                // 如果是 head节点，调用其写方法
                 headContext.write(this, msg, promise);
             } else if (handler instanceof ChannelDuplexHandler) {
+                // 如果处理器是双工处理器，调用其写方法
                 ((ChannelDuplexHandler) handler).write(this, msg, promise);
             } else if (handler instanceof ChannelOutboundHandlerAdapter) {
+                // 如果处理器是出站处理器适配器，调用其写方法
                 ((ChannelOutboundHandlerAdapter) handler).write(this, msg, promise);
             } else {
+                // 否则，调用通用的出站处理器的写方法
                 ((ChannelOutboundHandler) handler).write(this, msg, promise);
             }
         } catch (Throwable t) {
+            // 捕获异常并通知出站处理器发生异常
             notifyOutboundHandlerException(t, promise);
         }
     }
@@ -1087,14 +1095,31 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         return ctx;
     }
 
+    /**
+     * 检查是否可以跳过当前的上下文。
+     *
+     * @param ctx 当前的上下文
+     * @param currentExecutor 当前的事件执行器
+     * @param mask 用于检查的掩码
+     * @param onlyMask 仅用于检查的掩码
+     * @return 如果可以跳过当前上下文则返回 true，否则返回 false
+     *
+     * 该方法确保正确处理 MASK_EXCEPTION_CAUGHT，因为它不包含在 MASK_EXCEPTION_CAUGHT 中。
+     * 
+     * 跳过上下文的条件是：
+     * 1. 当前上下文的执行掩码与提供的掩码和仅掩码的按位与结果为 0，这意味着当前上下文不处理与提供的掩码相关的事件。
+     * 换句话说，如果当前上下文的掩码没有与传入的掩码重叠，那么它就可以被跳过。
+     * 2. 如果当前上下文的事件执行器与传入的事件执行器相同，并且当前上下文的执行掩码与提供的掩码的按位与结果为 0，
+     * 这表示当前上下文可以安全地跳过，因为它不会影响事件的处理顺序。
+     * 简单来说，如果当前上下文和传入的执行器是同一个，并且它的掩码不处理传入的事件，那么我们可以直接跳过这个上下文。
+     * 
+     * 这确保了在不同的事件执行器之间保持事件的顺序。
+     * 
+     * 参考： https://github.com/netty/netty/issues/10067
+     */
     private static boolean skipContext(
             AbstractChannelHandlerContext ctx, EventExecutor currentExecutor, int mask, int onlyMask) {
-        // Ensure we correctly handle MASK_EXCEPTION_CAUGHT which is not included in the MASK_EXCEPTION_CAUGHT
         return (ctx.executionMask & (onlyMask | mask)) == 0 ||
-                // We can only skip if the EventExecutor is the same as otherwise we need to ensure we offload
-                // everything to preserve ordering.
-                //
-                // See https://github.com/netty/netty/issues/10067
                 (ctx.executor() == currentExecutor && (ctx.executionMask & mask) == 0);
     }
 

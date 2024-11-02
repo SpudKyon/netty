@@ -16,10 +16,10 @@
 
 package io.netty.channel;
 
+import java.util.Map;
+
 import io.netty.channel.ChannelHandlerMask.Skip;
 import io.netty.util.internal.InternalThreadLocalMap;
-
-import java.util.Map;
 
 /**
  * Skeleton implementation of a {@link ChannelHandler}.
@@ -51,13 +51,19 @@ public abstract class ChannelHandlerAdapter implements ChannelHandler {
          *
          * See <a href="https://github.com/netty/netty/issues/2289">#2289</a>.
          */
+        // 获取当前类的 Class 对象
         Class<?> clazz = getClass();
+        // 从线程本地映射中获取处理器共享缓存
         Map<Class<?>, Boolean> cache = InternalThreadLocalMap.get().handlerSharableCache();
+        // 检查缓存中是否存在该类的共享状态
         Boolean sharable = cache.get(clazz);
+        // 如果缓存中不存在，则检查该类是否标记为 @Sharable
         if (sharable == null) {
             sharable = clazz.isAnnotationPresent(Sharable.class);
+            // 将共享状态存入缓存
             cache.put(clazz, sharable);
         }
+        // 返回该类的共享状态
         return sharable;
     }
 
