@@ -87,27 +87,36 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
     /**
      * Returns the bitmap index of the subpage allocation.
      */
+    // 分配一个可用的位图索引
     long allocate() {
+        // 检查是否有可用的元素，或者是否允许销毁
         if (numAvail == 0 || !doNotDestroy) {
-            return -1;
+            return -1; // 如果没有可用元素或不允许销毁，返回 -1
         }
 
+        // 获取下一个可用的位图索引
         final int bitmapIdx = getNextAvail();
+        // 检查位图索引是否有效
         if (bitmapIdx < 0) {
-            removeFromPool(); // Subpage appear to be in an invalid state. Remove to prevent repeated errors.
+            removeFromPool(); // 如果位图索引无效，移除子页面以防止重复错误
             throw new AssertionError("No next available bitmap index found (bitmapIdx = " + bitmapIdx + "), " +
                     "even though there are supposed to be (numAvail = " + numAvail + ") " +
                     "out of (maxNumElems = " + maxNumElems + ") available indexes.");
         }
-        int q = bitmapIdx >>> 6;
-        int r = bitmapIdx & 63;
+        // 计算位图索引的行和列
+        int q = bitmapIdx >>> 6; // 行索引
+        int r = bitmapIdx & 63;   // 列索引
+        // 确保该位图位置未被占用
         assert (bitmap[q] >>> r & 1) == 0;
+        // 标记该位图位置为已占用
         bitmap[q] |= 1L << r;
 
+        // 减少可用元素的数量，并检查是否为零
         if (-- numAvail == 0) {
-            removeFromPool();
+            removeFromPool(); // 如果没有可用元素，移除子页面
         }
 
+        // 返回位图索引的句柄
         return toHandle(bitmapIdx);
     }
 
@@ -170,38 +179,59 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
         nextAvail = bitmapIdx;
     }
 
+    // 获取下一个可用的索引
     private int getNextAvail() {
+        // 读取当前的下一个可用索引
         int nextAvail = this.nextAvail;
+        // 如果下一个可用索引有效（大于等于0）
         if (nextAvail >= 0) {
+            // 将下一个可用索引重置为-1，表示已被使用
             this.nextAvail = -1;
+            // 返回当前的下一个可用索引
             return nextAvail;
         }
+        // 如果没有有效的下一个可用索引，调用查找方法
         return findNextAvail();
     }
 
+    // 查找下一个可用的索引
     private int findNextAvail() {
+        // 遍历位图的每一项
         for (int i = 0; i < bitmapLength; i ++) {
+            // 获取当前位图的值
             long bits = bitmap[i];
+            // 如果当前位图中有可用的位（即不是全1）
             if (~bits != 0) {
+                // 调用辅助方法查找具体的可用索引
                 return findNextAvail0(i, bits);
             }
         }
+        // 如果没有找到可用的索引，返回-1
         return -1;
     }
 
+    // 在指定的位图中查找下一个可用的索引
     private int findNextAvail0(int i, long bits) {
+        // 计算基值，基于当前位图的索引
         final int baseVal = i << 6;
+        // 遍历64位
         for (int j = 0; j < 64; j ++) {
+            // 检查当前位是否可用（即为0）
             if ((bits & 1) == 0) {
+                // 计算具体的可用索引
                 int val = baseVal | j;
+                // 如果可用索引小于最大元素数量，返回该索引
                 if (val < maxNumElems) {
                     return val;
                 } else {
+                    // 如果超出范围，退出循环
                     break;
                 }
             }
+            // 右移位图，检查下一个位
             bits >>>= 1;
         }
+        // 如果没有找到可用的索引，返回-1
         return -1;
     }
 

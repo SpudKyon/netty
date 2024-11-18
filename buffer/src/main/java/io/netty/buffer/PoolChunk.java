@@ -22,6 +22,9 @@ import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.PriorityQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -311,49 +314,55 @@ final class PoolChunk<T> implements PoolChunkMetric {
         return 100 - freePercentage;
     }
 
+    // 分配内存给 PooledByteBuf，返回是否成功
     boolean allocate(PooledByteBuf<T> buf, int reqCapacity, int sizeIdx, PoolThreadCache cache) {
-        final long handle;
+        final long handle; // 用于存储分配的句柄
+        // 检查请求的大小索引是否在小型内存块的范围内
         if (sizeIdx <= arena.sizeClass.smallMaxSizeIdx) {
-            final PoolSubpage<T> nextSub;
-            // small
-            // Obtain the head of the PoolSubPage pool that is owned by the PoolArena and synchronize on it.
-            // This is need as we may add it back and so alter the linked-list structure.
+            final PoolSubpage<T> nextSub; // 用于存储下一个子页面
+            // 小型内存块的分配
+            // 获取 PoolArena 拥有的 PoolSubPage 池的头部并对其进行同步
+            // 这是必要的，因为我们可能会将其添加回去，从而改变链表结构
             PoolSubpage<T> head = arena.smallSubpagePools[sizeIdx];
-            head.lock();
+            head.lock(); // 锁定头部以确保线程安全
             try {
-                nextSub = head.next;
+                nextSub = head.next; // 获取下一个子页面
+                // 检查下一个子页面是否有效且未被销毁
                 if (nextSub != head) {
                     assert nextSub.doNotDestroy && nextSub.elemSize == arena.sizeClass.sizeIdx2size(sizeIdx) :
                             "doNotDestroy=" + nextSub.doNotDestroy + ", elemSize=" + nextSub.elemSize + ", sizeIdx=" +
                                     sizeIdx;
-                    handle = nextSub.allocate();
-                    assert handle >= 0;
-                    assert isSubpage(handle);
-                    nextSub.chunk.initBufWithSubpage(buf, null, handle, reqCapacity, cache);
-                    return true;
+                    handle = nextSub.allocate(); // 从下一个子页面分配内存
+                    assert handle >= 0; // 确保分配成功
+                    assert isSubpage(handle); // 确保句柄是子页面
+                    nextSub.chunk.initBufWithSubpage(buf, null, handle, reqCapacity, cache); // 初始化缓冲区
+                    return true; // 返回成功
                 }
+                // 如果没有可用的子页面，则尝试分配新的子页面
                 handle = allocateSubpage(sizeIdx, head);
                 if (handle < 0) {
-                    return false;
+                    return false; // 分配失败
                 }
-                assert isSubpage(handle);
+                assert isSubpage(handle); // 确保句柄是子页面
             } finally {
-                head.unlock();
+                head.unlock(); // 解锁头部
             }
         } else {
-            // normal
-            // runSize must be multiple of pageSize
-            int runSize = arena.sizeClass.sizeIdx2size(sizeIdx);
-            handle = allocateRun(runSize);
+            // 正常内存块的分配
+            // runSize 必须是 pageSize 的倍数
+            int runSize = arena.sizeClass.sizeIdx2size(sizeIdx); // 获取请求大小对应的运行大小
+            handle = allocateRun(runSize); // 分配运行
             if (handle < 0) {
-                return false;
+                return false; // 分配失败
             }
-            assert !isSubpage(handle);
+            assert !isSubpage(handle); // 确保句柄不是子页面
         }
 
-        ByteBuffer nioBuffer = cachedNioBuffers != null? cachedNioBuffers.pollLast() : null;
+        // 从缓存中获取 NIO 缓冲区（如果存在）
+        ByteBuffer nioBuffer = cachedNioBuffers != null ? cachedNioBuffers.pollLast() : null;
+        // 初始化缓冲区
         initBuf(buf, nioBuffer, handle, reqCapacity, cache);
-        return true;
+        return true; // 返回成功
     }
 
     private long allocateRun(int runSize) {
