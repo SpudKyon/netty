@@ -26,11 +26,11 @@ import io.netty.util.concurrent.OrderedEventExecutor;
 import io.netty.util.internal.ObjectPool;
 import io.netty.util.internal.ObjectPool.Handle;
 import io.netty.util.internal.ObjectPool.ObjectCreator;
-import io.netty.util.internal.PromiseNotificationUtil;
-import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.ObjectUtil;
+import io.netty.util.internal.PromiseNotificationUtil;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.SystemPropertyUtil;
+import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -347,15 +347,15 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             } catch (Throwable error) {
                 if (logger.isDebugEnabled()) {
                     logger.debug(
-                        "An exception {}" +
-                        "was thrown by a user handler's exceptionCaught() " +
-                        "method while handling the following exception:",
-                        ThrowableUtil.stackTraceToString(error), cause);
+                            "An exception {}" +
+                                    "was thrown by a user handler's exceptionCaught() " +
+                                    "method while handling the following exception:",
+                            ThrowableUtil.stackTraceToString(error), cause);
                 } else if (logger.isWarnEnabled()) {
                     logger.warn(
-                        "An exception '{}' [enable DEBUG level for full stacktrace] " +
-                        "was thrown by a user handler's exceptionCaught() " +
-                        "method while handling the following exception:", error, cause);
+                            "An exception '{}' [enable DEBUG level for full stacktrace] " +
+                                    "was thrown by a user handler's exceptionCaught() " +
+                                    "method while handling the following exception:", error, cause);
                 }
             }
         } else {
@@ -1098,23 +1098,23 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     /**
      * 检查是否可以跳过当前的上下文。
      *
-     * @param ctx 当前的上下文
+     * @param ctx             当前的上下文
      * @param currentExecutor 当前的事件执行器
-     * @param mask 用于检查的掩码
-     * @param onlyMask 仅用于检查的掩码
+     * @param mask            用于检查的掩码
+     * @param onlyMask        仅用于检查的掩码
      * @return 如果可以跳过当前上下文则返回 true，否则返回 false
-     *
+     * <p>
      * 该方法确保正确处理 MASK_EXCEPTION_CAUGHT，因为它不包含在 MASK_EXCEPTION_CAUGHT 中。
-     * 
+     * <p>
      * 跳过上下文的条件是：
      * 1. 当前上下文的执行掩码与提供的掩码和仅掩码的按位与结果为 0，这意味着当前上下文不处理与提供的掩码相关的事件。
      * 换句话说，如果当前上下文的掩码没有与传入的掩码重叠，那么它就可以被跳过。
      * 2. 如果当前上下文的事件执行器与传入的事件执行器相同，并且当前上下文的执行掩码与提供的掩码的按位与结果为 0，
      * 这表示当前上下文可以安全地跳过，因为它不会影响事件的处理顺序。
      * 简单来说，如果当前上下文和传入的执行器是同一个，并且它的掩码不处理传入的事件，那么我们可以直接跳过这个上下文。
-     * 
+     * <p>
      * 这确保了在不同的事件执行器之间保持事件的顺序。
-     * 
+     * <p>
      * 参考： https://github.com/netty/netty/issues/10067
      */
     private static boolean skipContext(
@@ -1133,7 +1133,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     final boolean setAddComplete() {
-        for (;;) {
+        for (; ; ) {
             int oldState = handlerState;
             if (oldState == REMOVE_COMPLETE) {
                 return false;
@@ -1175,7 +1175,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     /**
      * Makes best possible effort to detect if {@link ChannelHandler#handlerAdded(ChannelHandlerContext)} was called
      * yet. If not return {@code false} and if called or could not detect return {@code true}.
-     *
+     * <p>
      * If this method returns {@code false} we will not invoke the {@link ChannelHandler} but just forward the event.
      * This is needed as {@link DefaultChannelPipeline} may already put the {@link ChannelHandler} in the linked-list
      * but not called {@link ChannelHandler#handlerAdded(ChannelHandlerContext)}.
@@ -1202,7 +1202,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     private static boolean safeExecute(EventExecutor executor, Runnable runnable,
-            ChannelPromise promise, Object msg, boolean lazy) {
+                                       ChannelPromise promise, Object msg, boolean lazy) {
         try {
             if (lazy && executor instanceof AbstractEventExecutor) {
                 ((AbstractEventExecutor) executor).lazyExecute(runnable);
@@ -1241,7 +1241,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         });
 
         static WriteTask newInstance(AbstractChannelHandlerContext ctx,
-                Object msg, ChannelPromise promise, boolean flush) {
+                                     Object msg, ChannelPromise promise, boolean flush) {
             WriteTask task = RECYCLER.get();
             init(task, ctx, msg, promise, flush);
             return task;

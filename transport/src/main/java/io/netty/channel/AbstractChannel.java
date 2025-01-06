@@ -509,8 +509,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
          */
         private void register0(ChannelPromise promise) {
             try {
-                // 检查通道是否仍然开放，因为在事件循环外调用注册时，通道可能已经关闭
                 // 参数检查，确保 promise 是不可取消的，并且通道是开放的
+                // 检查通道是否仍然开放，因为在事件循环外调用注册时，通道可能已经关闭
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return; // 如果不满足条件，直接返回
                 }
